@@ -1,22 +1,22 @@
-# GF-Shield: Selecao de Features Distribuida para IDS
+# 🇧🇷 GF-Shield: Seleção de Features Distribuída para IDS
 
 ## 📃 Visão Geral
 
 **GF-Shield** é uma arquitetura distribuída baseada na metaheurística **GRASP-FS**, voltada para a seleção de atributos em sistemas de detecção de intrusões (IDS). O sistema é dividido em duas partes principais:
 
-* **DRG (Distributed RCL Generator)** — Gera as listas candidatas (RCL) com diferentes algoritmos de seleção de features.
-* **DLS (Distributed Local Search)** — Aplica técnicas de busca local distribuídas sobre essas listas para encontrar a melhor solução.
+* **DRG (Distributed RCL Generator)** — Gera listas candidatas (RCL) com diferentes algoritmos de seleção de features.
+* **DLS (Distributed Local Search)** — Aplica buscas locais distribuídas sobre essas listas para encontrar a melhor solução.
 
 ---
 
 ## 🧠 Algoritmos Utilizados (DRG)
 
-Cada algoritmo roda como um microsserviço independente e envia soluções para o Kafka:
+Cada algoritmo é um microsserviço independente e envia soluções para o Kafka:
 
-* Information Gain (porta **8089**)
-* Gain Ratio (porta **8088**)
-* Symmetrical Uncertainty (porta **8087**)
-* Relief (porta **8086**)
+* Information Gain (**porta 8089**)
+* Gain Ratio (**porta 8088**)
+* Symmetrical Uncertainty (**porta 8087**)
+* Relief (**porta 8086**)
 
 ---
 
@@ -24,18 +24,18 @@ Cada algoritmo roda como um microsserviço independente e envia soluções para 
 
 Todos os algoritmos DRG recebem os seguintes parâmetros via `x-www-form-urlencoded`:
 
-* **maxGenerations**: número de soluções a serem geradas por execução.
-* **rclCutoff**: número máximo de features que compõem a lista RCL.
-* **sampleSize**: quantidade de features sorteadas da RCL para cada solução.
-* **datasetTrainingName**: nome do arquivo `.arff` de treinamento (deve estar na pasta `/datasets`).
+* **maxGenerations**: número de soluções geradas por execução.
+* **rclCutoff**: número máximo de atributos na RCL.
+* **sampleSize**: número de atributos sorteados da RCL por solução.
+* **datasetTrainingName**: nome do arquivo `.arff` de treino (deve estar em `/datasets`).
 * **datasetTestingName**: nome do arquivo `.arff` de teste.
-* **classifierName** *(opcional)*: classificador Weka a ser usado (`J48`, `NB`, `RF`...).
+* **classifierName** *(opcional)*: classificador Weka a ser utilizado (`J48`, `NB`, `RF`, etc).
 
 ---
 
 ## 🔁 Microsserviços de Busca Local (DLS)
 
-Aplicam a busca sobre as soluções vindas dos DRG:
+Executam otimizações sobre as soluções do DRG:
 
 * BitFlip (**8082**)
 * IWSS (**8083**)
@@ -50,17 +50,17 @@ Aplicam a busca sobre as soluções vindas dos DRG:
 
 ![Arquitetura Full](./figures/ArquiteturaFull.drawio.png)
 
-### DRG: Gera listas RCL iniciais a partir dos datasets.
+### DRG: Gera listas RCL a partir dos datasets.
 
-### DLS: Recebe as listas e aplica busca local com VND ou RVND e algoritmos BitFlip, IWSS ou IWSSR.
+### DLS: Aplica busca local sobre essas listas utilizando diferentes estratégias.
 
 #### Fluxo:
 
 ```
-[datasets/] ➔ [Microsserviços DRG] ➔ [Kafka - Initial Solutions Topic]
-                                      ➔ [Microsserviços DLS]
-                                      ➔ [Kafka - Best Solutions Topic]
-                                      ➔ [IDS]
+[datasets/] → [Microsserviços DRG] → [Kafka - Initial Solutions Topic]
+                                     → [Microsserviços DLS]
+                                     → [Kafka - Best Solutions Topic]
+                                     → [IDS]
 ```
 
 ---
@@ -78,71 +78,78 @@ Aplicam a busca sobre as soluções vindas dos DRG:
 
 ## 📦 Execução com Docker Compose
 
-### 1. Estrutura esperada
+### 1. Estrutura Esperada
 
 ```
 project-root/
-├── datasets/          # Dataset compartilhado (entrada)
-├── metrics/           # Arquivos .csv salvos (saída)
+├── datasets/         # Dataset compartilhado (entrada)
+├── metrics/          # Resultados (.csv) gerados (saída)
 ├── docker-compose.yml
 ```
 
-### 2. Rodar o projeto
+### 2. Rodar o Projeto
 
 ```bash
 docker-compose up --build
 ```
 
-### 3. Acesso ao Kafka
+### 3. Visualizar Tópicos Kafka
 
-Acesse [http://localhost:8080](http://localhost:8080) para visualizar os tópicos no Conduktor.
+Acesse [http://localhost:8080](http://localhost:8080) via navegador (Conduktor).
 
 ---
 
 ## 📃 Resultados
 
-Todos os resultados (F1, features, tempo, etc.) são salvos automaticamente nos arquivos `.csv` dentro do volume `/metrics`.
+Todos os resultados (F1-score, tempo, features, etc.) são armazenados automaticamente nos arquivos `.csv` da pasta `/metrics`.
 
 ---
 
-# GF-Shield: Scalable Feature Selection for Intrusion Detection
+## 🤝 Colaboradores
+
+* [Silvio Ereno Quincozes](https://github.com/sequincozes)
+* [Estêvão Filipe Cardoso](https://github.com/EstevaoFCardoso)
+
+---
+
+# 🇺🇸 GF-Shield: Scalable Feature Selection for Intrusion Detection
 
 ## 📃 Overview
 
-**GF-Shield** is a distributed system based on the **GRASP-FS** metaheuristic for selecting features in IDS. It is divided into:
+**GF-Shield** is a distributed architecture based on the **GRASP-FS** metaheuristic to perform feature selection for Intrusion Detection Systems (IDS). It consists of two major components:
 
-* **DRG (Distributed RCL Generator)** — Generates candidate lists (RCL) with classic feature selection algorithms.
-* **DLS (Distributed Local Search)** — Applies distributed local search using VND or RVND.
+* **DRG (Distributed RCL Generator)** — Generates Restricted Candidate Lists (RCL) using different feature selection algorithms.
+* **DLS (Distributed Local Search)** — Applies local search algorithms in a distributed way to improve those solutions.
 
 ---
 
-## 🧠 Algorithms Used (DRG)
+## 🧠 Feature Selection Algorithms (DRG)
 
-Each algorithm runs as a microservice and sends initial solutions to Kafka:
+Each algorithm runs as an independent microservice and sends solutions to Kafka:
 
-* Information Gain (**8089**)
-* Gain Ratio (**8088**)
-* Symmetrical Uncertainty (**8087**)
-* Relief (**8086**)
+* Information Gain (**port 8089**)
+* Gain Ratio (**port 8088**)
+* Symmetrical Uncertainty (**port 8087**)
+* Relief (**port 8086**)
 
 ---
 
 ## 🔍 Input Parameters
 
-All DRG algorithms accept the following parameters via `x-www-form-urlencoded`:
+All DRG microservices expect the following parameters via `x-www-form-urlencoded`:
 
-* **maxGenerations**: number of candidate solutions to generate.
-* **rclCutoff**: max number of features to compose RCL.
-* **sampleSize**: number of features drawn from RCL per solution.
-* **datasetTrainingName**: name of `.arff` training file (must be in `/datasets`).
-* **datasetTestingName**: name of `.arff` test file.
-* **classifierName** *(optional)*: Weka classifier (`J48`, `NB`, `RF`...).
+* **maxGenerations**: number of solutions to generate.
+* **rclCutoff**: max number of features per RCL.
+* **sampleSize**: number of features selected from the RCL per solution.
+* **datasetTrainingName**: name of the `.arff` training file (must be in `/datasets`).
+* **datasetTestingName**: name of the `.arff` test file.
+* **classifierName** *(optional)*: Weka classifier to use (`J48`, `NB`, `RF`, etc).
 
 ---
 
 ## 🔁 Local Search Microservices (DLS)
 
-Perform distributed optimization over candidate solutions:
+These microservices optimize the initial solutions:
 
 * BitFlip (**8082**)
 * IWSS (**8083**)
@@ -155,19 +162,19 @@ Perform distributed optimization over candidate solutions:
 
 ## 🚀 Architecture
 
-![Arquitetura Full](./ArquiteturaFull.drawio.png)
+![Arquitetura Full](./figures/ArquiteturaFull.drawio.png)
 
-### DRG: Generates RCL lists from training data.
+### DRG: Generates RCL lists from training datasets.
 
-### DLS: Receives initial lists and performs search (BitFlip, IWSS, IWSSR).
+### DLS: Receives and improves those lists using local search.
 
 #### Flow:
 
 ```
-[datasets/] ➔ [DRG Microservices] ➔ [Kafka - Initial Solutions Topic]
-                                  ➔ [DLS Microservices]
-                                  ➔ [Kafka - Best Solutions Topic]
-                                  ➔ [IDS]
+[datasets/] → [DRG Microservices] → [Kafka - Initial Solutions Topic]
+                                 → [DLS Microservices]
+                                 → [Kafka - Best Solutions Topic]
+                                 → [IDS]
 ```
 
 ---
@@ -185,12 +192,12 @@ Perform distributed optimization over candidate solutions:
 
 ## 📦 Running with Docker Compose
 
-### 1. Expected structure
+### 1. Expected Structure
 
 ```
 project-root/
-├── datasets/          # Shared input
-├── metrics/           # CSV output
+├── datasets/         # Shared input
+├── metrics/          # CSV output
 ├── docker-compose.yml
 ```
 
@@ -200,13 +207,19 @@ project-root/
 docker-compose up --build
 ```
 
-### 3. Access Kafka UI
+### 3. Access Kafka Console
 
-Visit [http://localhost:8080](http://localhost:8080) for Conduktor Console.
+Go to [http://localhost:8080](http://localhost:8080) to explore topics in Conduktor.
 
 ---
 
 ## 📃 Output
 
-All results (F1-score, features, etc.) are saved automatically in `.csv` files under the `/metrics` volume.
+All results (F1-score, features used, time, etc.) are saved into `.csv` files under the `/metrics` volume.
 
+---
+
+## 🤝 Contributors
+
+* [Silvio Ereno Quincozes](https://github.com/sequincozes)
+* [Estêvão Filipe Cardoso](https://github.com/EstevaoFCardoso)
