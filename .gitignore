@@ -1,0 +1,40 @@
+# Ignorar todo conteúdo da pasta datasets (mantém a pasta vazia no repositório)
+datasets/*
+!datasets/.gitkeep
+
+# Ignorar todo conteúdo da pasta metrics (mantém a pasta vazia no repositório)
+metrics/*
+!metrics/.gitkeep
+
+# Ignorar diretórios de build do Maven (target/)
+**/target/
+
+# Ignorar arquivos de log ou temporários
+*.log
+*.tmp
+*.swp
+*.bak
+*.class
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# VS Code
+.vscode/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos gerados por Maven
+**/maven-archiver/
+**/maven-status/
+**/generated-sources/
+**/generated-test-sources/
+

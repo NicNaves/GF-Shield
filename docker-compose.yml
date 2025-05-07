@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  grasp-fs-rcl-su:
+    build:
+      context: ./grasp-fs-rcl-generator/Features Selection/Symmetrical Uncertainty/grasp-fs-rcl-su
+    ports:
+      - "8087:8087"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-rcl-rf:
+    build:
+      context: ./grasp-fs-rcl-generator/Features Selection/RelieF/grasp-fs-rcl-rf
+    ports:
+      - "8086:8086"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-rcl-ig:
+    build:
+      context: ./grasp-fs-rcl-generator/Features Selection/InfoGain/grasp-fs-rcl-ig
+    ports:
+      - "8089:8089"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-rcl-gr:
+    build:
+      context: ./grasp-fs-rcl-generator/Features Selection/GainRatio/grasp-fs-rcl-gr
+    ports:
+      - "8088:8088"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs.dls.verify:
+    build:
+      context: ./grasp-fs-distributed-ls/Verify/grasp-fs.dls.verify
+    ports:
+      - "8085:8085"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-dls-bf:
+    build:
+      context: ./grasp-fs-distributed-ls/Local Search/BitFlip/grasp-fs-dls-bf
+    ports:
+      - "8082:8082"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-dls-iw:
+    build:
+      context: ./grasp-fs-distributed-ls/Local Search/IWSS/grasp-fs-dls-iw
+    ports:
+      - "8083:8083"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-dls-iwr:
+    build:
+      context: ./grasp-fs-distributed-ls/Local Search/IWSSR/grasp-fs-dls-iwr
+    ports:
+      - "8084:8084"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-dls-rvnd:
+    build:
+      context: ./grasp-fs-distributed-ls/Neighborhood/RVND/grasp-fs-dls-rvnd
+    ports:
+      - "8090:8090"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  grasp-fs-dls-vnd:
+    build:
+      context: ./grasp-fs-distributed-ls/Neighborhood/VND/grasp-fs-dls-vnd
+    ports:
+      - "8091:8091"
+    volumes:
+      - dataset_volume:/datasets
+      - metrics_volume:/metrics
+
+  zookeeper:
+    image: 'bitnami/zookeeper:latest'
+    ports:
+      - '2181:2181'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+
+  kafka:
+    image: 'bitnami/kafka:latest'
+    ports:
+      - '9092:9092'
+      - '29092:29092'
+      - '9999:9999'
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT_INTERNAL
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - JMX_PORT=9999
+      - KAFKA_JMX_PORT=9999
+      - KAFKA_JMX_HOSTNAME=localhost
+    depends_on:
+      - zookeeper
+
+  postgresql:
+    image: postgres:14
+    hostname: postgresql
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      PGDATA: "/var/lib/postgresql/data"
+      POSTGRES_DB: "conduktor-console"
+      POSTGRES_USER: "conduktor"
+      POSTGRES_PASSWORD: "change_me"
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgresql-2:
+    image: postgres:14
+    hostname: postgresql-sql
+    volumes:
+      - pg_data_sql:/var/lib/postgresql/data
+    environment:
+      PGDATA: "/var/lib/postgresql/data"
+      POSTGRES_DB: "conduktor-sql"
+      POSTGRES_USER: "conduktor"
+      POSTGRES_PASSWORD: "change_me"
+      POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  conduktor-console:
+    image: conduktor/conduktor-console:1.32.0
+    ports:
+      - "8080:8080"
+    volumes:
+      - conduktor_data:/var/conduktor
+    environment:
+      CDK_DATABASE_URL: "postgresql://conduktor:change_me@postgresql:5432/conduktor-console"
+      CDK_KAFKASQL_DATABASE_URL: "postgresql://conduktor:change_me@postgresql-sql:5432/conduktor-sql"
+      CDK_ORGANIZATION_NAME: "local-dev"
+      CDK_CLUSTERS_0_ID: "local-kafka"
+      CDK_CLUSTERS_0_NAME: "local-kafka"
+      CDK_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka:29092"
+      CDK_CLUSTERS_0_COLOR: "#6A57C8"
+      CDK_CLUSTERS_0_ICON: "kafka"
+      CDK_MONITORING_CORTEX-URL: http://conduktor-monitoring:9009/
+      CDK_MONITORING_ALERT-MANAGER-URL: http://conduktor-monitoring:9010/
+      CDK_MONITORING_CALLBACK-URL: http://conduktor-console:8080/monitoring/api/
+      CDK_MONITORING_NOTIFICATIONS-CALLBACK-URL: http://localhost:8080
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  conduktor-monitoring:
+    image: conduktor/conduktor-console-cortex:1.32.0
+    environment:
+      CDK_CONSOLE-URL: "http://conduktor-console:8080"
+
+volumes:
+  pg_data: {}
+  pg_data_sql: {}
+  conduktor_data: {}
+  dataset_volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./datasets
+  metrics_volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./metrics
