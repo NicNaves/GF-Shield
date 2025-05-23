@@ -9,7 +9,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-rcl-rf:
     build:
       context: ./grasp-fs-rcl-generator/Features Selection/RelieF/grasp-fs-rcl-rf
@@ -18,7 +24,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-rcl-ig:
     build:
       context: ./grasp-fs-rcl-generator/Features Selection/InfoGain/grasp-fs-rcl-ig
@@ -27,7 +39,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-rcl-gr:
     build:
       context: ./grasp-fs-rcl-generator/Features Selection/GainRatio/grasp-fs-rcl-gr
@@ -36,7 +54,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs.dls.verify:
     build:
       context: ./grasp-fs-distributed-ls/Verify/grasp-fs.dls.verify
@@ -45,7 +69,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-dls-bf:
     build:
       context: ./grasp-fs-distributed-ls/Local Search/BitFlip/grasp-fs-dls-bf
@@ -54,7 +84,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-dls-iw:
     build:
       context: ./grasp-fs-distributed-ls/Local Search/IWSS/grasp-fs-dls-iw
@@ -63,7 +99,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-dls-iwr:
     build:
       context: ./grasp-fs-distributed-ls/Local Search/IWSSR/grasp-fs-dls-iwr
@@ -72,7 +114,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-dls-rvnd:
     build:
       context: ./grasp-fs-distributed-ls/Neighborhood/RVND/grasp-fs-dls-rvnd
@@ -81,7 +129,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   grasp-fs-dls-vnd:
     build:
       context: ./grasp-fs-distributed-ls/Neighborhood/VND/grasp-fs-dls-vnd
@@ -90,7 +144,13 @@ services:
     volumes:
       - dataset_volume:/datasets
       - metrics_volume:/metrics
-
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
   zookeeper:
     image: 'bitnami/zookeeper:latest'
     ports:
@@ -99,7 +159,7 @@ services:
       - ALLOW_ANONYMOUS_LOGIN=yes
 
   kafka:
-    image: 'bitnami/kafka:latest'
+    image: 'bitnami/kafka:3.4'
     ports:
       - '9092:9092'
       - '29092:29092'
@@ -183,6 +243,13 @@ services:
     image: conduktor/conduktor-console-cortex:1.32.0
     environment:
       CDK_CONSOLE-URL: "http://conduktor-console:8080"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      postgresql-2:
+        condition: service_healthy
+      kafka:
+        condition: service_started
 
 volumes:
   pg_data: {}

@@ -34,6 +34,16 @@ public class DataSolution {
     @JsonProperty("f1Score")
     private Float f1Score;// 98%
 
+    @JsonProperty("accuracy")
+    private Float accuracy;
+
+    @JsonProperty("precision")
+    private Float precision;
+
+    @JsonProperty("recall")
+    private Float recall;
+
+
     @JsonProperty("localSearch")
     private LocalSearch localSearch; // BF
 

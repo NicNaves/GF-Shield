@@ -1,11 +1,13 @@
 package br.com.graspfs.ls.bf.service;
 
 import br.com.graspfs.ls.bf.dto.DataSolution;
+import br.com.graspfs.ls.bf.dto.EvaluationResult;
 import br.com.graspfs.ls.bf.enuns.LocalSearch;
 import br.com.graspfs.ls.bf.machinelearning.MachineLearning;
 import br.com.graspfs.ls.bf.producer.KafkaSolutionsProducer;
 import br.com.graspfs.ls.bf.util.MachineLearningUtils;
 import br.com.graspfs.ls.bf.util.PrintSolution;
+import br.com.graspfs.ls.bf.util.SystemMetricsUtils.MetricsCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,7 @@ import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Random;
 
 @Component
@@ -62,7 +65,7 @@ public class BitFlipService {
     }
 
     private void escreverCabecalhoCSV(BufferedWriter writer) throws IOException {
-        writer.write("solutionFeatures;f1Score;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime");
+        writer.write("solutionFeatures;f1Score;accuracy;precision;recall;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime(ms);cpuUsage(%);memoryUsage(MB);memoryUsagePercent(%);classifier;trainingFileName;testingFileName");
         writer.newLine();
     }
 
@@ -87,39 +90,74 @@ public class BitFlipService {
             solution.getRclfeatures().add(solution.getSolutionFeatures().remove(positionReplace));
             solution.setIterationLocalSearch(solution.getIterationLocalSearch() + 1);
 
-            float f1 = MachineLearning.evaluateSolution(
+                // ⏱️ Inicia coleta de métricas em paralelo
+            MetricsCollector collector = new MetricsCollector();
+            Thread monitor = new Thread(collector);
+            monitor.start();
+
+            EvaluationResult Scores = MachineLearning.evaluateSolution(
                     new ArrayList<>(solution.getSolutionFeatures()),
                     new Instances(trainingDataset),
                     new Instances(testingDataset),
                     classifier
             );
 
-            solution.setF1Score(f1);
+            // 🚫 Para a coleta
+            collector.stop();
+            monitor.join();
+
+            solution.setF1Score(Scores.getF1Score());
+            solution.setPrecision(Scores.getPrecision());
+            solution.setAccuracy(Scores.getAccuracy());
+            solution.setRecall(Scores.getRecall());
             solution.setRunnigTime(System.currentTimeMillis());
 
-            log.info("🌀 Iteração {}: F1={} Features={} ", i, f1, solution.getSolutionFeatures());
+            log.info("🌀 Iteração {}: F1={} Features={} ", i, Scores.getF1Score(), solution.getSolutionFeatures());
             PrintSolution.logSolution(solution);
-            escreverLinhaCSV(writer, solution);
+            
+            escreverLinhaCSV(writer, solution, collector);
 
-            if (f1 > bestSolution.getF1Score()) {
+            if (Scores.getF1Score() > bestSolution.getF1Score()) {
                 bestSolution = updateSolution(solution);
             }
 
             i++;
         }
 
+      
         return bestSolution;
     }
 
-    private void escreverLinhaCSV(BufferedWriter writer, DataSolution s) throws IOException {
+    private void escreverLinhaCSV(BufferedWriter writer, DataSolution s, MetricsCollector collector) throws IOException {
+        float avgCpu = collector.getAvgCpu();
+        float avgMemory = collector.getAvgMemory();
+        float avgMemoryPercent = collector.getAvgMemoryPercent();
+        String f1Formatted = String.format(Locale.US, "%.4f", s.getF1Score());
+        String accFormatted = String.format(Locale.US, "%.4f", s.getAccuracy());
+        String precFormatted = String.format(Locale.US, "%.4f", s.getPrecision());
+        String recFormatted = String.format(Locale.US, "%.4f", s.getRecall());
+        String timeFormatted = String.format(Locale.US, "%d", s.getRunnigTime());
+        String cpuFormatted = String.format(Locale.US, "%.4f", avgCpu);
+        String memFormatted = String.format(Locale.US, "%.4f", avgMemory);
+        String memPercentFormatted = String.format(Locale.US, "%.4f", avgMemoryPercent);
+
         writer.write(String.join(";",
-                s.getSolutionFeatures().toString(),
-                String.valueOf(s.getF1Score()),
-                String.valueOf(s.getNeighborhood()),
-                String.valueOf(s.getIterationNeighborhood()),
-                String.valueOf(s.getLocalSearch()),
-                String.valueOf(s.getIterationLocalSearch()),
-                String.valueOf(s.getRunnigTime())
+            s.getSolutionFeatures().toString(),
+            f1Formatted,
+            accFormatted,
+            precFormatted,
+            recFormatted,
+            String.valueOf(s.getNeighborhood()),
+            String.valueOf(s.getIterationNeighborhood()),
+            String.valueOf(s.getLocalSearch()),
+            String.valueOf(s.getIterationLocalSearch()),
+            timeFormatted,
+            cpuFormatted,
+            memFormatted,
+            memPercentFormatted,
+            s.getClassfier(),
+            s.getTrainingFileName(),
+            s.getTestingFileName()
         ));
         writer.newLine();
     }
@@ -136,6 +174,9 @@ public class BitFlipService {
                 .testingFileName(s.getTestingFileName())
                 .localSearch(s.getLocalSearch())
                 .f1Score(s.getF1Score())
+                .accuracy(s.getAccuracy())
+                .precision(s.getPrecision())
+                .recall(s.getRecall())
                 .runnigTime(s.getRunnigTime())
                 .iterationLocalSearch(s.getIterationLocalSearch())
                 .build();

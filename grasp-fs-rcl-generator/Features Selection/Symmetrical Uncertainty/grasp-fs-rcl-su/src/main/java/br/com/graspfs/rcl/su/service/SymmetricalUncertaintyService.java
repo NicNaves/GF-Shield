@@ -1,15 +1,19 @@
 package br.com.graspfs.rcl.su.service;
 
 import br.com.graspfs.rcl.su.dto.DataSolution;
+import br.com.graspfs.rcl.su.dto.EvaluationResult;
 import br.com.graspfs.rcl.su.dto.FeatureAvaliada;
 import br.com.graspfs.rcl.su.machinelearning.MachineLearning;
 import br.com.graspfs.rcl.su.util.MachineLearningUtils;
 import br.com.graspfs.rcl.su.util.SelectionFeaturesUtils;
+import br.com.graspfs.rcl.su.util.SystemMetricsUtils.MetricsCollector;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import weka.core.Instances;
 import java.io.BufferedWriter;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Random;
 import org.springframework.stereotype.Service;
 import weka.classifiers.AbstractClassifier;
@@ -76,29 +80,61 @@ public class SymmetricalUncertaintyService {
         }
 
         rcl.setSolutionFeatures(solutionFeatures);
+        // ⏱️ Inicia coleta de métricas em paralelo
+        MetricsCollector collector = new MetricsCollector();
+        Thread monitor = new Thread(collector);
+        monitor.start();
 
         // Avalia a solução com os datasets fornecidos e o classificador escolhido
-        float f1Score = MachineLearning.evaluateSolution(
+        EvaluationResult result = MachineLearning.evaluateSolution(
                 new ArrayList<>(solutionFeatures),            // evita mutações
                 new Instances(trainingDataset),               // cópia profunda do dataset
                 new Instances(testingDataset),                // idem
                 classifier                                     // classificador escolhido dinamicamente
         );
 
-        rcl.setF1Score(f1Score);
+
+        // 🚫 Para a coleta
+        collector.stop();
+        monitor.join();
+
+        rcl.setF1Score(result.getF1Score());
+        rcl.setAccuracy(result.getAccuracy());
+        rcl.setPrecision(result.getPrecision());
+        rcl.setRecall(result.getRecall());
+
         rcl.setRunnigTime(System.currentTimeMillis() - startTime);
 
-        logger.info("Solução gerada - RCL: {} | Solução: {} | F1: {}", rcl.getRclfeatures(), solutionFeatures, f1Score);
 
-        // Escreve a métrica no arquivo CSV
+        logger.info("Solução gerada - RCL: {} | Solução: {} | F1: {}", rcl.getRclfeatures(), solutionFeatures, rcl.getF1Score());
+
+        float avgCpu = collector.getAvgCpu();
+        float avgMemory = collector.getAvgMemory();
+        float avgMemoryPercent = collector.getAvgMemoryPercent();
+        String f1Formatted = String.format(Locale.US, "%.4f", rcl.getF1Score());
+        String accFormatted = String.format(Locale.US, "%.4f", rcl.getAccuracy());
+        String precFormatted = String.format(Locale.US, "%.4f", rcl.getPrecision());
+        String recFormatted = String.format(Locale.US, "%.4f", rcl.getRecall());
+        String timeFormatted = String.format(Locale.US, "%d", rcl.getRunnigTime());
+        String cpuFormatted = String.format(Locale.US, "%.4f", avgCpu);
+        String memFormatted = String.format(Locale.US, "%.4f", avgMemory);
+        String memPercentFormatted = String.format(Locale.US, "%.4f", avgMemoryPercent);
+
+        // Escreve a métrica no arquivo CSV com precisão aprimorada
         writer.write(String.join(";",
             solutionFeatures.toString(),
-            String.valueOf(f1Score),
+            f1Formatted,
+            accFormatted,
+            precFormatted,
+            recFormatted,
             String.valueOf(rcl.getNeighborhood()),
             String.valueOf(rcl.getIterationNeighborhood()),
             String.valueOf(rcl.getLocalSearch()),
             String.valueOf(rcl.getIterationLocalSearch()),
-            String.valueOf(rcl.getRunnigTime()),
+            timeFormatted,
+            cpuFormatted,
+            memFormatted,
+            memPercentFormatted,
             rcl.getClassfier(),
             rcl.getTrainingFileName(),
             rcl.getTestingFileName()
@@ -106,5 +142,7 @@ public class SymmetricalUncertaintyService {
         writer.newLine();
 
         return rcl;
-    }
-}
+        }
+        }
+
+        

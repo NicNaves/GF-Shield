@@ -1,11 +1,11 @@
 package br.com.graspfs.rcl.ig.machinelearning;
+import br.com.graspfs.rcl.ig.dto.EvaluationResult;
 import br.com.graspfs.rcl.ig.util.MachineLearningUtils;
 import weka.classifiers.AbstractClassifier;
-import weka.classifiers.trees.J48;
 import weka.core.Instance;
 import weka.core.Instances;
 import java.util.ArrayList;
-import br.com.graspfs.rcl.ig.util.MachineLearningUtils;
+
 
 
 // https://github.com/sequincozes/TES
@@ -13,7 +13,7 @@ public class MachineLearning {
 
     public static double normalClass = 0; // isso aqui representa as classes com o valor N
 
-    public static float evaluateSolution(
+    public static EvaluationResult evaluateSolution(
             ArrayList<Integer> features,
             Instances trainingDataset,
             Instances testingDataset,
@@ -65,19 +65,20 @@ public class MachineLearning {
         long endNano = System.nanoTime();
         float totalNano = (endNano - beginNano) / 1000f; // converte para microssegundos
 
-        float f1score = calculateF1Score(testingDataset, totalNano, VP, VN, FP, FN);
+        EvaluationResult scores = calculateScore(testingDataset, totalNano, VP, VN, FP, FN);
 
         //MachineLearningUtils.printResults(testingDataset, totalNano, VP, VN, FP, FN);
 
-        return f1score;
+        return scores;
     }
 
-    public static float calculateF1Score(Instances datasetTestes, float totalNano, float VP, float VN, float FP, float FN) {
-        float acuracia = (VP + VN) * 100 / (VP + VN + FP + FN); // quantos acertos o IDS teve
+    public static EvaluationResult calculateScore(Instances datasetTestes, float totalNano, float VP, float VN, float FP, float FN) {
+        float accuracy = (VP + VN) * 100 / (VP + VN + FP + FN); // quantos acertos o IDS teve
         float recall = (VP + FN) == 0 ? 0 : (VP * 100) / (VP + FN); // quantas vezes eu acertei dentre as vezes REALMENTE ESTAVA acontecendo um ataque
         float precision = (VP + FP) == 0 ? 0 : (VP * 100) / (VP + FP); // quantas vezes eu acertei dentre as vezes que eu DISSE que estava acontecendo
         float f1score = (recall + precision) == 0 ? 0 : 2 * (recall * precision) / (recall + precision);
-        return f1score;
+        EvaluationResult score = new EvaluationResult(f1score, precision, recall, accuracy);
+        return score;
     }
 
 }

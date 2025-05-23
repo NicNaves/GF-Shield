@@ -62,7 +62,7 @@ public class GainRationController {
             // Abre arquivo CSV para salvar métricas
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(METRICS_FILE_NAME, true))) {
                 if (isFirstTime) {
-                    writer.write("solutionFeatures;f1Score;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime;classifier;trainingFileName;testingFileName");
+                    writer.write("solutionFeatures;f1Score;accuracy;precision;recall;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime(ms);cpuUsage(%);memoryUsage(MB);memoryUsagePercent(%);classifier;trainingFileName;testingFileName");
                     writer.newLine();
                     isFirstTime = false;
                 }

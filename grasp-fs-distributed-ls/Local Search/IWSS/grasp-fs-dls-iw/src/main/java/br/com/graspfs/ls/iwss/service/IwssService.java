@@ -1,11 +1,13 @@
 package br.com.graspfs.ls.iwss.service;
 
 import br.com.graspfs.ls.iwss.dto.DataSolution;
+import br.com.graspfs.ls.iwss.dto.EvaluationResult;
 import br.com.graspfs.ls.iwss.enuns.LocalSearch;
 import br.com.graspfs.ls.iwss.machinelearning.MachineLearning;
 import br.com.graspfs.ls.iwss.producer.KafkaSolutionsProducer;
 import br.com.graspfs.ls.iwss.util.MachineLearningUtils;
 import br.com.graspfs.ls.iwss.util.PrintSolution;
+import br.com.graspfs.ls.iwss.util.SystemMetricsUtils.MetricsCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +22,7 @@ import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -42,7 +45,7 @@ public class IwssService {
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(metricsFileName, true))) {
             if (firstTime) {
-                writer.write("solutionFeatures;f1Score;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime");
+                writer.write("solutionFeatures;f1Score;accuracy;precision;recall;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime(ms);cpuUsage(%);memoryUsage(MB);memoryUsagePercent(%);classifier;trainingFileName;testingFileName");
                 writer.newLine();
                 firstTime = false;
             }
@@ -75,6 +78,11 @@ public class IwssService {
     }
 
     private DataSolution addMovement(DataSolution solution, BufferedWriter writer) throws Exception {
+        long startTime = System.currentTimeMillis();
+        // ⏱️ Inicia coleta de métricas em paralelo
+        MetricsCollector collector = new MetricsCollector();
+        Thread monitor = new Thread(collector);
+        monitor.start();
         solution.getSolutionFeatures().add(solution.getRclfeatures().remove(0));
 
         Instances trainingDataset = MachineLearningUtils.lerDataset(
@@ -84,23 +92,54 @@ public class IwssService {
 
         AbstractClassifier classifier = getClassifier(solution.getClassfier());
 
-        float f1Score = MachineLearning.evaluateSolution(
+        
+
+        EvaluationResult Scores = MachineLearning.evaluateSolution(
                 new ArrayList<>(solution.getSolutionFeatures()),
                 new Instances(trainingDataset),
                 new Instances(testingDataset),
                 classifier);
 
-        solution.setF1Score(f1Score);
-        solution.setRunnigTime(System.currentTimeMillis());
+        // 🚫 Para a coleta
+        collector.stop();
+        monitor.join();
+        
+        solution.setF1Score(Scores.getF1Score());
+        solution.setAccuracy(Scores.getAccuracy());
+        solution.setRecall(Scores.getRecall());
+        solution.setPrecision(Scores.getPrecision());
+        solution.setRunnigTime(System.currentTimeMillis() - startTime);;
+
+        float avgCpu = collector.getAvgCpu();
+        float avgMemory = collector.getAvgMemory();
+        float avgMemoryPercent = collector.getAvgMemoryPercent();
+        String f1Formatted = String.format(Locale.US, "%.4f", solution.getF1Score());
+        String accFormatted = String.format(Locale.US, "%.4f", solution.getAccuracy());
+        String precFormatted = String.format(Locale.US, "%.4f", solution.getPrecision());
+        String recFormatted = String.format(Locale.US, "%.4f", solution.getRecall());
+        String timeFormatted = String.format(Locale.US, "%d", solution.getRunnigTime());
+        String cpuFormatted = String.format(Locale.US, "%.4f", avgCpu);
+        String memFormatted = String.format(Locale.US, "%.4f", avgMemory);
+        String memPercentFormatted = String.format(Locale.US, "%.4f", avgMemoryPercent);
 
         writer.write(String.join(";",
-                solution.getSolutionFeatures().toString(),
-                String.valueOf(solution.getF1Score()),
-                String.valueOf(solution.getNeighborhood()),
-                String.valueOf(solution.getIterationNeighborhood()),
-                solution.getLocalSearch().name(),
-                String.valueOf(solution.getIterationLocalSearch()),
-                String.valueOf(solution.getRunnigTime())));
+            solution.getSolutionFeatures().toString(),
+            f1Formatted,
+            accFormatted,
+            precFormatted,
+            recFormatted,
+            String.valueOf(solution.getNeighborhood()),
+            String.valueOf(solution.getIterationNeighborhood()),
+            String.valueOf(solution.getLocalSearch()),
+            String.valueOf(solution.getIterationLocalSearch()),
+            timeFormatted,
+            cpuFormatted,
+            memFormatted,
+            memPercentFormatted,
+            solution.getClassfier(),
+            solution.getTrainingFileName(),
+            solution.getTestingFileName()
+        ));
         writer.newLine();
 
         return solution;
@@ -131,6 +170,9 @@ public class IwssService {
                 .testingFileName(solution.getTestingFileName())
                 .neighborhood(solution.getNeighborhood())
                 .f1Score(solution.getF1Score())
+                .accuracy(solution.getAccuracy())
+                .recall(solution.getRecall())
+                .precision(solution.getPrecision())
                 .runnigTime(solution.getRunnigTime())
                 .iterationLocalSearch(solution.getIterationLocalSearch())
                 .localSearch(solution.getLocalSearch())

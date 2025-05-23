@@ -1,10 +1,12 @@
 package br.com.graspfs.ls.iwssr.service;
 
 import br.com.graspfs.ls.iwssr.dto.DataSolution;
+import br.com.graspfs.ls.iwssr.dto.EvaluationResult;
 import br.com.graspfs.ls.iwssr.enuns.LocalSearch;
 import br.com.graspfs.ls.iwssr.machinelearning.MachineLearning;
 import br.com.graspfs.ls.iwssr.producer.KafkaSolutionsProducer;
 import br.com.graspfs.ls.iwssr.util.MachineLearningUtils;
+import br.com.graspfs.ls.iwssr.util.SystemMetricsUtils.MetricsCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +21,7 @@ import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -33,7 +36,7 @@ public class IwssrService {
     @Value("${iwssr.metrics.file:/metrics/IWSSR_METRICS.csv}")
     private String metricsFileName;
 
-    private BufferedWriter br;
+    private BufferedWriter writer;
     private boolean firstTime = true;
 
     public void doIwssr(DataSolution seed) throws Exception {
@@ -42,12 +45,13 @@ public class IwssrService {
         data.setIterationLocalSearch(data.getIterationLocalSearch() + 1);
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(metricsFileName, true))) {
-            this.br = writer;
+            this.writer = writer;
             if (firstTime) {
-                writer.write("solutionFeatures;f1Score;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime");
+                writer.write("solutionFeatures;f1Score;accuracy;precision;recall;neighborhood;iterationNeighborhood;localSearch;iterationLocalSearch;runnigTime(ms);cpuUsage(%);memoryUsage(MB);memoryUsagePercent(%);classifier;trainingFileName;testingFileName");
                 writer.newLine();
                 firstTime = false;
             }
+            
             DataSolution bestSolution = incrementalWrapperSequencialSearch(data);
             bestSolution = updateSolution(resetDataSolution(seed, bestSolution));
             kafkaSolutionsProducer.send(bestSolution);
@@ -55,6 +59,7 @@ public class IwssrService {
     }
 
     public DataSolution incrementalWrapperSequencialSearch(DataSolution dataSolution) throws Exception {
+        
         dataSolution.setIterationLocalSearch(dataSolution.getIterationLocalSearch() + 1);
         DataSolution bestSolution = updateSolution(dataSolution);
 
@@ -78,18 +83,34 @@ public class IwssrService {
     }
 
     private DataSolution addMovement(DataSolution solution) throws Exception {
-        solution.getSolutionFeatures().add(solution.getRclfeatures().remove(0));
+        // ⏱️ Inicia coleta de métricas em paralelo
+        MetricsCollector collector = new MetricsCollector();
+        Thread monitor = new Thread(collector);
+        monitor.start();
 
-        float f1Score = evaluateWithDataset(solution);
-        solution.setF1Score(f1Score);
+        solution.getSolutionFeatures().add(solution.getRclfeatures().remove(0));
+        
+        EvaluationResult Scores = evaluateWithDataset(solution);
+        solution.setF1Score(Scores.getF1Score());
+        solution.setAccuracy(Scores.getAccuracy());
+        solution.setPrecision(Scores.getPrecision());
+        solution.setRecall(Scores.getRecall());
         solution.setRunnigTime(System.currentTimeMillis());
 
-        logMetrics(solution);
+        // 🚫 Para a coleta
+        collector.stop();
+        monitor.join();
+    
+        logMetrics(solution, collector);
         return solution;
     }
 
     private DataSolution replaceMovement(DataSolution solution) throws Exception {
         DataSolution bestReplace = updateSolution(solution);
+        // ⏱️ Inicia coleta de métricas em paralelo
+        MetricsCollector collector = new MetricsCollector();
+        Thread monitor = new Thread(collector);
+        monitor.start();
 
         for (int i = 0; i < solution.getSolutionFeatures().size(); i++) {
             final long time = System.currentTimeMillis();
@@ -97,22 +118,29 @@ public class IwssrService {
             DataSolution replaced = updateSolution(solution);
             replaced.getSolutionFeatures().remove(i);
 
-            float f1 = evaluateWithDataset(replaced);
-            replaced.setF1Score(f1);
+            EvaluationResult Scores = evaluateWithDataset(replaced);
+            replaced.setF1Score(Scores.getF1Score());
+            replaced.setAccuracy(Scores.getAccuracy());
+            replaced.setPrecision(Scores.getPrecision());
+            replaced.setRecall(Scores.getRecall());
             replaced.setRunnigTime(System.currentTimeMillis() - time);
 
-            logMetrics(replaced);
+            // 🚫 Para a coleta
+            collector.stop();
+            monitor.join();
+        
+            logMetrics(replaced, collector);
 
-            if (f1 > bestReplace.getF1Score()) {
+            if (Scores.getF1Score() > bestReplace.getF1Score()) {
                 bestReplace = updateSolution(replaced);
-                log.info("BESTSOLUTION : {} solution: {}", f1, bestReplace.getSolutionFeatures());
+                log.info("BESTSOLUTION : {} solution: {}", Scores.getF1Score(), bestReplace.getSolutionFeatures());
             }
         }
 
         return bestReplace;
     }
 
-    private float evaluateWithDataset(DataSolution solution) throws Exception {
+    private EvaluationResult evaluateWithDataset(DataSolution solution) throws Exception {
         Instances training = MachineLearningUtils.lerDataset(
                 new FileInputStream(datasetsBasePath + solution.getTrainingFileName())
         );
@@ -142,20 +170,41 @@ public class IwssrService {
         return data;
     }
 
-    private void logMetrics(DataSolution solution) throws Exception {
-        br.write(String.join(";",
-                solution.getSolutionFeatures().toString(),
-                String.valueOf(solution.getF1Score()),
-                String.valueOf(solution.getNeighborhood()),
-                String.valueOf(solution.getIterationNeighborhood()),
-                solution.getLocalSearch().name(),
-                String.valueOf(solution.getIterationLocalSearch()),
-                String.valueOf(solution.getRunnigTime())
+    private void logMetrics(DataSolution solution, MetricsCollector collector) throws Exception {
+        float avgCpu = collector.getAvgCpu();
+        float avgMemory = collector.getAvgMemory();
+        float avgMemoryPercent = collector.getAvgMemoryPercent();
+        String f1Formatted = String.format(Locale.US, "%.4f", solution.getF1Score());
+        String accFormatted = String.format(Locale.US, "%.4f", solution.getAccuracy());
+        String precFormatted = String.format(Locale.US, "%.4f", solution.getPrecision());
+        String recFormatted = String.format(Locale.US, "%.4f", solution.getRecall());
+        String timeFormatted = String.format(Locale.US, "%d", solution.getRunnigTime());
+        String cpuFormatted = String.format(Locale.US, "%.4f", avgCpu);
+        String memFormatted = String.format(Locale.US, "%.4f", avgMemory);
+        String memPercentFormatted = String.format(Locale.US, "%.4f", avgMemoryPercent);
+
+        writer.write(String.join(";",
+            solution.getSolutionFeatures().toString(),
+            f1Formatted,
+            accFormatted,
+            precFormatted,
+            recFormatted,
+            String.valueOf(solution.getNeighborhood()),
+            String.valueOf(solution.getIterationNeighborhood()),
+            String.valueOf(solution.getLocalSearch()),
+            String.valueOf(solution.getIterationLocalSearch()),
+            timeFormatted,
+            cpuFormatted,
+            memFormatted,
+            memPercentFormatted,
+            solution.getClassfier(),
+            solution.getTrainingFileName(),
+            solution.getTestingFileName()
         ));
-        br.newLine();
+        writer.newLine();
     }
 
-    private static DataSolution updateSolution(DataSolution solution) {
+    private DataSolution updateSolution(DataSolution solution) {
         return DataSolution.builder()
                 .seedId(solution.getSeedId())
                 .rclfeatures(new ArrayList<>(solution.getRclfeatures()))
@@ -166,6 +215,9 @@ public class IwssrService {
                 .testingFileName(solution.getTestingFileName())
                 .neighborhood(solution.getNeighborhood())
                 .f1Score(solution.getF1Score())
+                .accuracy(solution.getAccuracy())
+                .recall(solution.getRecall())
+                .precision(solution.getPrecision())
                 .runnigTime(solution.getRunnigTime())
                 .iterationLocalSearch(solution.getIterationLocalSearch())
                 .localSearch(solution.getLocalSearch())
